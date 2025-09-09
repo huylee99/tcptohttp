@@ -78,7 +78,7 @@ array_t *getLines(int client_fd) {
     }
 
     for (int i = 0; i < bytes_size; i++) {
-      if (buffer[i] != '\n') {
+      if (buffer[i] != '\n' && buffer[i] != '\r') {
         line[current_line_size] = buffer[i];
         current_line_size++;
       } else {
@@ -148,7 +148,8 @@ int main() {
     array_t *arr = getLines(client_sockfd);
 
     for (int i = 0; i < arr->count; i++) {
-      printf("read: %s \n", (char *)arr->elements[i]);
+      printf("%s \n", (char *)arr->elements[i]);
+	fflush(stdout);
     }
 
     arr_destroy(arr);
