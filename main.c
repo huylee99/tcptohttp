@@ -99,8 +99,10 @@ int main() {
   int sock_fd;
   int opt = 1;
   struct sockaddr_in server_addr;
+  struct sockaddr_in client_addr;
   sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-  socklen_t addr_size = sizeof(server_addr);
+  socklen_t server_addr_size = sizeof(server_addr);
+  socklen_t client_addr_size = sizeof(server_addr);
 
   if (sock_fd == -1) {
     perror("socket failed");
@@ -118,7 +120,7 @@ int main() {
     exit(EXIT_FAILURE);
   }
 
-  if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+  if (bind(sock_fd, (struct sockaddr *)&server_addr, server_addr_size) < 0) {
     perror("bind failed failed");
     close(sock_fd);
     exit(EXIT_FAILURE);
@@ -134,15 +136,15 @@ int main() {
 
   while (1) {
     int client_sockfd =
-        accept(sock_fd, (struct sockaddr *)&server_addr, &addr_size);
+        accept(sock_fd, (struct sockaddr *)&client_addr, &client_addr_size);
 
     if (client_sockfd == -1) {
       perror("accept failed \n");
       continue;
     }
-
     printf("connection accepted \n");
-
+    printf("Information: %s:%d \n", inet_ntoa(client_addr.sin_addr),
+           ntohs(client_addr.sin_port));
     array_t *arr = getLines(client_sockfd);
 
     for (int i = 0; i < arr->count; i++) {
