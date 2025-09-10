@@ -71,17 +71,7 @@ array_t *getLines(int client_fd) {
   size_t bytes_size = 0;
   size_t line_size = INITIAL_LINE_SIZE;
 
-  while (1) {
-    if ((bytes_size = recv(client_fd, buffer, BUFFER_SIZE, 0)) < 1) {
-      if (current_line_size > 0) {
-        line[current_line_size] = '\0';
-        add_line_to_arr(arr, line);
-        line = NULL;
-      }
-
-      break;
-    }
-
+  while ((bytes_size = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
     if (current_line_size > line_size) {
       line_size *= 2;
       line = realloc(line, line_size);
@@ -100,6 +90,12 @@ array_t *getLines(int client_fd) {
     }
   }
 
+  // POST request body doesn't have endline
+  if (bytes_size == 0 && current_line_size > 0) {
+    line[current_line_size] = '\0';
+    add_line_to_arr(arr, line);
+    line = NULL;
+  }
   free(line);
 
   return arr;
