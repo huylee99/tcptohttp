@@ -1,0 +1,17 @@
+Listening on port 42069
+connection accepted 
+Information: 127.0.0.1:48158 
+POST /coffee HTTP/1.1
+
+Host: localhost:42069
+
+User-Agent: curl/8.5.0
+
+Accept: */*
+
+Content-Type: application/json
+
+Content-Length: 22
+
+
+

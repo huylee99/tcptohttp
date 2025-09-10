@@ -71,14 +71,24 @@ array_t *getLines(int client_fd) {
   size_t bytes_size = 0;
   size_t line_size = INITIAL_LINE_SIZE;
 
-  while ((bytes_size = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
+  while (1) {
+    if ((bytes_size = recv(client_fd, buffer, BUFFER_SIZE, 0)) < 1) {
+      if (current_line_size > 0) {
+        line[current_line_size] = '\0';
+        add_line_to_arr(arr, line);
+        line = NULL;
+      }
+
+      break;
+    }
+
     if (current_line_size > line_size) {
       line_size *= 2;
       line = realloc(line, line_size);
     }
 
     for (int i = 0; i < bytes_size; i++) {
-      if (buffer[i] != '\n' && buffer[i] != '\r') {
+      if (buffer[i] != '\n') {
         line[current_line_size] = buffer[i];
         current_line_size++;
       } else {
@@ -148,8 +158,8 @@ int main() {
     array_t *arr = getLines(client_sockfd);
 
     for (int i = 0; i < arr->count; i++) {
-      printf("%s \n", (char *)arr->elements[i]);
-	fflush(stdout);
+      printf("%s\n", (char *)arr->elements[i]);
+      fflush(stdout);
     }
 
     arr_destroy(arr);
