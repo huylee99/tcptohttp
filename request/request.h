@@ -35,6 +35,6 @@ typedef struct ChunkReader {
 
  
 
-request_t *request_from_reader(chunk_reader_t *reader);
+request_t *request_from_reader(int client_fd);
 size_t parse_request_line(char *line, request_t *request);
 

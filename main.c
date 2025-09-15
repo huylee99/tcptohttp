@@ -1,5 +1,6 @@
 #include "arpa/inet.h"
 #include "netinet/in.h"
+#include "request/request.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -151,14 +152,18 @@ int main() {
     printf("connection accepted \n");
     printf("Information: %s:%d \n", inet_ntoa(client_addr.sin_addr),
            ntohs(client_addr.sin_port));
-    array_t *arr = getLines(client_sockfd);
-
-    for (int i = 0; i < arr->count; i++) {
-      printf("%s\n", (char *)arr->elements[i]);
-      fflush(stdout);
-    }
-
-    arr_destroy(arr);
+    // array_t *arr = getLines(client_sockfd);
+    request_t *request = request_from_reader(client_sockfd);
+    printf("%s \n", request->request_line->method);
+    printf("%s \n", request->request_line->request_target);
+    printf("%s \n", request->request_line->http_version);
+    //
+    // for (int i = 0; i < arr->count; i++) {
+    //   printf("%s\n", (char *)arr->elements[i]);
+    fflush(stdout);
+    // }
+    //
+    // arr_destroy(arr);
     printf("Connection closed\n!");
 
     close(client_sockfd);

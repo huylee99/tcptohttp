@@ -2,6 +2,7 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
+#include "sys/socket.h"
 
 #define BYTES_READ 100
 
@@ -123,7 +124,7 @@ size_t parse_request_line(char *line, request_t *request) {
   return end_index + 2;
 }
 
-request_t *request_from_reader(chunk_reader_t *reader) {
+request_t *request_from_reader(int client_fd) {
 
   request_line_t *request_line = malloc(sizeof(request_line_t));
 
@@ -137,7 +138,7 @@ request_t *request_from_reader(chunk_reader_t *reader) {
     return NULL;
   }
 
-  size_t allocated_size = reader->bytes_per_read + 1;
+  size_t allocated_size = BYTES_READ + 1;
   char *line = malloc(allocated_size);
   line[0] = '\0';
   request->request_line = request_line;
@@ -148,7 +149,7 @@ request_t *request_from_reader(chunk_reader_t *reader) {
 
   while (request->state != DONE) {
     if (read_to_index >= allocated_size) {
-      allocated_size += reader->bytes_per_read + 1;
+      allocated_size += BYTES_READ + 1;
       char *temp = realloc(line, allocated_size);
 
       if (temp == NULL) {
@@ -158,7 +159,7 @@ request_t *request_from_reader(chunk_reader_t *reader) {
       line = temp;
     }
 
-    bytes_read = chunk_reader_read(reader, line, reader->bytes_per_read);
+    bytes_read = recv(client_fd, line, BYTES_READ, 0);
 
     if (bytes_read == 0) {
       break;
@@ -186,26 +187,26 @@ request_t *request_from_reader(chunk_reader_t *reader) {
   return request;
 }
 
-int main() {
-
-  chunk_reader_t *reader =
-      chunk_reader("GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: "
-                   "curl/7.81.0\r\nAccept: */*\r\n\r\n",
-                   BYTES_READ);
-
-  if (reader == NULL) {
-    perror("Cannot initilize reader\n");
-    return EXIT_FAILURE;
-  }
-
-  request_t *request = request_from_reader(reader);
-  printf("%s \n", request->request_line->method);
-  printf("%s \n", request->request_line->request_target);
-  printf("%s \n", request->request_line->http_version);
-
-  free(request->request_line);
-  free(request);
-  free(reader);
-
-  return EXIT_SUCCESS;
-}
+// int main() {
+//
+//   chunk_reader_t *reader =
+//       chunk_reader("GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: "
+//                    "curl/7.81.0\r\nAccept: */*\r\n\r\n",
+//                    BYTES_READ);
+//
+//   if (reader == NULL) {
+//     perror("Cannot initilize reader\n");
+//     return EXIT_FAILURE;
+//   }
+//
+//   request_t *request = request_from_reader(reader);
+//   printf("%s \n", request->request_line->method);
+//   printf("%s \n", request->request_line->request_target);
+//   printf("%s \n", request->request_line->http_version);
+//
+//   free(request->request_line);
+//   free(request);
+//   free(reader);
+//
+//   return EXIT_SUCCESS;
+// }
