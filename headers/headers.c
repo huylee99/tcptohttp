@@ -1,18 +1,23 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
+#include "stdbool.h"
+#include "ctype.h"
+#include "headers.h"
 
-typedef struct Header {
-	char key[64];
-	char value[128];
-	size_t bytes_consumed;
-} header_t;
+void add_to_arr(header_t *header, array_t *array) {
+	if (header == NULL || array == NULL) {
+		fprintf(stderr, "add_to_arr: Error \n");
+		exit(EXIT_FAILURE);
+	}
 
-typedef struct Arr {
-	size_t count;
-	size_t capacity;
-	header_t **elements;
-} array_t;
+	if (array->count == array->capacity) {
+		array->capacity = array->capacity * 2;
+		array->elements = realloc(array->elements, sizeof(header_t *) * array->capacity);
+	}
+	array->elements[array->count] = header;
+	array->count++;
+}
 
 char *trim(char *buffer) {
 	size_t str_length = strlen(buffer);
@@ -40,6 +45,7 @@ char *trim(char *buffer) {
 	return new_str;
 }
 
+
 void destroy_arr(array_t *array) {
 	for (size_t i = 0; i < array->count; i++) {
 		free(array->elements[i]);
@@ -49,7 +55,117 @@ void destroy_arr(array_t *array) {
 	free(array);
 }
 
-header_t *parse(char *headers) {
+bool is_special_character_allowed(char field_name_char) {
+	if (field_name_char == '!' || field_name_char == '#' || field_name_char == '$' || field_name_char == '%' || field_name_char == '$' || field_name_char == '\'' || field_name_char == '*' || field_name_char == '+' || field_name_char == '-' || field_name_char == '.' || field_name_char == '^' || field_name_char == '_' || field_name_char == '`' || field_name_char == '|' || field_name_char == '~') {
+		return true;
+	}
+
+	return false;
+}
+
+bool is_valid_field_name(char* field_name) {
+	if (field_name == NULL) {
+		return false;
+	}
+
+	size_t length = strlen(field_name);
+	
+	if (length <= 0) {
+		return false;
+	}
+
+	for (size_t i = 0; i < length; i++) {
+		if (isalpha(field_name[i]) || isdigit(field_name[i]) || is_special_character_allowed(field_name[i])) {
+			continue;
+		} else {
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+char *to_lower_case(char *field_name) {
+	if (field_name == NULL) {
+		return NULL;
+	}
+
+	size_t str_length = strlen(field_name);
+
+	char *lower_case_str = malloc(sizeof(char) * str_length + 1);
+
+	if (lower_case_str == NULL) {
+		return NULL;
+	}
+	
+	for (size_t i = 0; i < str_length; i++) {
+		lower_case_str[i] = tolower(field_name[i]);
+	}
+
+	lower_case_str[str_length] = '\0';
+
+	return lower_case_str;
+}
+
+header_t *is_header_key_existed(char *field_name, array_t *arr) {
+	if (arr == NULL || field_name == NULL) {
+		fprintf(stderr, "Error: arr or field_name is NULL\n");
+		exit(EXIT_FAILURE);
+	}
+	// bool is_key_existed = false;
+	char *lower_field_name = to_lower_case(field_name);
+	//
+	// char *lower_item_field_name = to_lower_case(header->key);
+	//
+	// if (strcmp(lower_item_field_name, lower_field_name) == 0) {
+	// 	is_key_existed = true;
+	// } 
+	//
+	// free(lower_field_name);
+	// free(lower_item_field_name);
+	//
+	// return is_key_existed;
+
+	header_t *found_header_ptr = NULL;
+
+	for (int i = 0; i < arr->count; i++) {
+		if (found_header_ptr != NULL) {
+			break;
+		}
+
+	     	header_t *header = arr->elements[i];
+		char *lower_item_field_name = to_lower_case(header->key);
+		if (strcmp(lower_field_name, lower_item_field_name) == 0) {
+			found_header_ptr = arr->elements[i];
+		}
+		free(lower_item_field_name);
+	}
+
+	free(lower_field_name);
+	return found_header_ptr;
+}
+
+void add_value_to_header(header_t *header, array_t *arr) {
+	if (header == NULL || arr == NULL) {
+		fprintf(stderr, "add_value_to_header: Header or Arr is NULL\n");
+		exit(EXIT_FAILURE);
+	}
+
+	header_t *header_ptr = is_header_key_existed(header->key, arr);
+
+	if (header_ptr == NULL) {
+		add_to_arr(header, arr);
+		return;
+	}
+
+	// if key is existed
+	char *separator = ", ";
+	strncat(header_ptr->value, separator, 2);
+	strncat(header_ptr->value, header->value, strlen(header->value));
+}
+
+
+header_t *parse_header(char *headers) {
 	
 	char *crlf = "\r\n";
 	size_t bytes_consumed = 0;
@@ -114,7 +230,6 @@ header_t *parse(char *headers) {
 	
 	new_header->key[0] = '\0';
 	new_header->value[0] = '\0';
-	new_header->bytes_consumed = bytes_consumed;
 	
 	char *trimmed_value = trim(line);
 	
@@ -132,28 +247,33 @@ header_t *parse(char *headers) {
 
 int main() {
 	
-	// array_t *array = malloc(sizeof(array_t));
+	array_t *array = malloc(sizeof(array_t));
 	//
-	// if (array == NULL) {
-	// 	exit(EXIT_FAILURE);
-	// }
-	//
-	// array->count = 0;
-	// array->capacity = 8;
-	//
-	// array->elements = malloc(sizeof(void *) * 8);
-	//
-	// if (array->elements == NULL) {
-	// 	free(array);
-	// 	exit(EXIT_FAILURE);
-	// }
+	if (array == NULL) {
+		exit(EXIT_FAILURE);
+	}
 
-	header_t *header = parse("       Host: localhost:42069       \r\n\r\n");
+	array->count = 0;
+	array->capacity = 8;
+
+	array->elements = malloc(sizeof(void *) * 8);
+
+	if (array->elements == NULL) {
+		free(array);
+		exit(EXIT_FAILURE);
+	}
+
+	header_t *header = parse_header("Host: localhost:42069\r\n\r\n");
+
+	add_to_arr(header, array);
 	printf("%s \n", header->key);
 	printf("%s \n", header->value);
-	printf("%zu \n", header->bytes_consumed);
-	// destroy_arr(array);
-	free(header);
+
+	for (int i = 0; i < array->count; i++) {
+		printf("key: %s - value: %s \n", array->elements[i]->key, array->elements[i]->value);
+	}
+
+	destroy_arr(array);
 
 	return EXIT_SUCCESS;
 }

@@ -1,52 +1,307 @@
 #include "request.h"
+#include "ctype.h"
+#include "stdbool.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include "sys/socket.h"
+#include <asm-generic/errno.h>
 
-#define BYTES_READ 100
+#define BYTES_READ 8
+#define LINE_SIZE 1024
 
-size_t chunk_reader_read(chunk_reader_t *cr, char *p, size_t p_len) {
-  if (cr->pos >= cr->data_size) {
-    return 0; // EOF
+void add_to_arr(header_t *header, array_t *array) {
+  if (header == NULL || array == NULL) {
+    fprintf(stderr, "add_to_arr: Error \n");
+    exit(EXIT_FAILURE);
   }
 
-  size_t end_index = cr->pos + cr->bytes_per_read;
-
-  if (end_index > cr->data_size) {
-    end_index = cr->data_size;
+  if (array->count == array->capacity) {
+    array->capacity = array->capacity * 2;
+    array->elements =
+        realloc(array->elements, sizeof(header_t *) * array->capacity);
   }
-
-  size_t bytes_to_copy = end_index - cr->pos;
-
-  if (bytes_to_copy > p_len) {
-    bytes_to_copy = p_len;
-  }
-
-  strncat(p, cr->data + cr->pos, bytes_to_copy);
-  cr->pos += bytes_to_copy;
-
-  return bytes_to_copy;
+  array->elements[array->count] = header;
+  array->count++;
 }
 
-chunk_reader_t *chunk_reader(char *data, size_t num_bytes_per_read) {
-  if (data == NULL) {
+char *trim(char *buffer) {
+  size_t str_length = strlen(buffer);
+
+  // trim leading whitespace
+
+  char *start = buffer;
+
+  while (*start == ' ') {
+    start++;
+  }
+
+  char *end = start + strlen(start);
+
+  while (*end == ' ') {
+    *end = '\0';
+    end--;
+  }
+
+  str_length = strlen(start);
+  char *new_str = malloc(str_length + 1);
+  new_str[0] = '\0';
+  strncat(new_str, start, str_length);
+
+  return new_str;
+}
+
+void destroy_arr(array_t *array) {
+  for (size_t i = 0; i < array->count; i++) {
+    free(array->elements[i]);
+  }
+
+  free(array->elements);
+  free(array);
+}
+
+bool is_special_character_allowed(char field_name_char) {
+  if (field_name_char == '!' || field_name_char == '#' ||
+      field_name_char == '$' || field_name_char == '%' ||
+      field_name_char == '$' || field_name_char == '\'' ||
+      field_name_char == '*' || field_name_char == '+' ||
+      field_name_char == '-' || field_name_char == '.' ||
+      field_name_char == '^' || field_name_char == '_' ||
+      field_name_char == '`' || field_name_char == '|' ||
+      field_name_char == '~') {
+    return true;
+  }
+
+  return false;
+}
+
+bool is_valid_field_name(char *field_name) {
+  if (field_name == NULL) {
+    return false;
+  }
+
+  size_t length = strlen(field_name);
+
+  if (length <= 0) {
+    return false;
+  }
+
+  for (size_t i = 0; i < length; i++) {
+    if (isalpha(field_name[i]) || isdigit(field_name[i]) ||
+        is_special_character_allowed(field_name[i])) {
+      continue;
+    } else {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+char *to_lower_case(char *field_name) {
+  if (field_name == NULL) {
     return NULL;
   }
 
-  chunk_reader_t *reader = malloc(sizeof(chunk_reader_t));
+  size_t str_length = strlen(field_name);
 
-  if (reader == NULL) {
+  char *lower_case_str = malloc(sizeof(char) * str_length + 1);
+
+  if (lower_case_str == NULL) {
     return NULL;
   }
 
-  reader->data = data;
-  reader->pos = 0;
-  reader->data_size = strlen(reader->data);
-  reader->bytes_per_read = num_bytes_per_read;
+  for (size_t i = 0; i < str_length; i++) {
+    lower_case_str[i] = tolower(field_name[i]);
+  }
 
-  return reader;
+  lower_case_str[str_length] = '\0';
+
+  return lower_case_str;
 }
+
+header_t *is_header_key_existed(char *field_name, array_t *arr) {
+  if (arr == NULL || field_name == NULL) {
+    fprintf(stderr, "Error: arr or field_name is NULL\n");
+    exit(EXIT_FAILURE);
+  }
+  // bool is_key_existed = false;
+  char *lower_field_name = to_lower_case(field_name);
+  //
+  // char *lower_item_field_name = to_lower_case(header->key);
+  //
+  // if (strcmp(lower_item_field_name, lower_field_name) == 0) {
+  // 	is_key_existed = true;
+  // }
+  //
+  // free(lower_field_name);
+  // free(lower_item_field_name);
+  //
+  // return is_key_existed;
+
+  header_t *found_header_ptr = NULL;
+
+  for (int i = 0; i < arr->count; i++) {
+    if (found_header_ptr != NULL) {
+      break;
+    }
+
+    header_t *header = arr->elements[i];
+    char *lower_item_field_name = to_lower_case(header->key);
+    if (strcmp(lower_field_name, lower_item_field_name) == 0) {
+      found_header_ptr = arr->elements[i];
+    }
+    free(lower_item_field_name);
+  }
+
+  free(lower_field_name);
+  return found_header_ptr;
+}
+
+void add_value_to_header(header_t *header, array_t *arr) {
+  if (header == NULL || arr == NULL) {
+    fprintf(stderr, "add_value_to_header: Header or Arr is NULL\n");
+    exit(EXIT_FAILURE);
+  }
+
+  header_t *header_ptr = is_header_key_existed(header->key, arr);
+
+  if (header_ptr == NULL) {
+    add_to_arr(header, arr);
+    return;
+  }
+
+  // if key is existed
+  char *separator = ", ";
+  strncat(header_ptr->value, separator, 2);
+  strncat(header_ptr->value, header->value, strlen(header->value));
+}
+
+size_t parse_header(char *headers, request_t *request) {
+
+  char *crlf = "\r\n";
+  size_t bytes_consumed = 0;
+  char *ptr = headers;
+
+  while (*ptr == ' ') {
+    ptr++;
+    bytes_consumed++;
+  }
+
+  if (*ptr == '\r' && *(ptr + 1) == '\n') {
+    request->state = DONE;
+    return bytes_consumed;
+  }
+
+  char *header_start_ptr = ptr;
+  size_t end_size = 0;
+  char *line = malloc(1);
+  line[0] = '\0';
+
+  while (*ptr) {
+    if (*ptr == '\r' && *(ptr + 1) == '\n') {
+      line = realloc(line, end_size + 1);
+      strncat(line, header_start_ptr, end_size);
+      bytes_consumed += end_size + 2;
+      ptr -= end_size;
+      break;
+    } else if (end_size + 2 == strlen(header_start_ptr)) {
+      return 0;
+    } else {
+      ptr++;
+      end_size++;
+    }
+  }
+
+  while (1) {
+    if (*ptr != ':') {
+      ptr++;
+      continue;
+    }
+
+    if (*(ptr - 1) == ' ') {
+      fprintf(stderr, "Header is invalid \n");
+      exit(EXIT_FAILURE);
+    } else {
+      break;
+    }
+  }
+
+  char *old_ptr = line;
+  char *key = strsep(&line, ":");
+
+  if (key == NULL) {
+    fprintf(stderr, "Invalid header \n");
+    exit(EXIT_FAILURE);
+  }
+  char *trimmed_key = trim(key);
+  header_t *new_header = malloc(sizeof(header_t));
+
+  if (new_header == NULL) {
+    fprintf(stderr, "Cannot initialize new_header\n");
+    exit(EXIT_FAILURE);
+  }
+
+  new_header->key[0] = '\0';
+  new_header->value[0] = '\0';
+
+  char *trimmed_value = trim(line);
+
+  strncat(new_header->key, trimmed_key, strlen(trimmed_key));
+  strncat(new_header->value, trimmed_value, strlen(trimmed_value));
+
+  // array->elements[array->count] = new_header;
+  // array->count++;
+  free(old_ptr);
+  free(trimmed_key);
+  free(trimmed_value);
+
+  add_value_to_header(new_header, request->headers);
+
+  return bytes_consumed;
+}
+
+// size_t chunk_reader_read(chunk_reader_t *cr, char *p, size_t p_len) {
+//   if (cr->pos >= cr->data_size) {
+//     return 0; // EOF
+//   }
+//
+//   size_t end_index = cr->pos + cr->bytes_per_read;
+//
+//   if (end_index > cr->data_size) {
+//     end_index = cr->data_size;
+//   }
+//
+//   size_t bytes_to_copy = end_index - cr->pos;
+//
+//   if (bytes_to_copy > p_len) {
+//     bytes_to_copy = p_len;
+//   }
+//
+//   strncat(p, cr->data + cr->pos, bytes_to_copy);
+//   cr->pos += bytes_to_copy;
+//
+//   return bytes_to_copy;
+// }
+//
+// chunk_reader_t *chunk_reader(char *data, size_t num_bytes_per_read) {
+//   if (data == NULL) {
+//     return NULL;
+//   }
+//
+//   chunk_reader_t *reader = malloc(sizeof(chunk_reader_t));
+//
+//   if (reader == NULL) {
+//     return NULL;
+//   }
+//
+//   reader->data = data;
+//   reader->pos = 0;
+//   reader->data_size = strlen(reader->data);
+//   reader->bytes_per_read = num_bytes_per_read;
+//
+//   return reader;
+// }
 
 size_t parse(char *line, request_t *request) {
   switch (request->state) {
@@ -56,7 +311,16 @@ size_t parse(char *line, request_t *request) {
     if (bytes_consumed == 0) {
       return 0;
     }
-    request->state = DONE;
+    request->state = PARSING_HEADERS;
+    return bytes_consumed;
+  }
+  case PARSING_HEADERS: {
+    size_t bytes_consumed = parse_header(line, request);
+
+    if (bytes_consumed == 0) {
+      return 0;
+    }
+
     return bytes_consumed;
   }
   case DONE: {
@@ -138,34 +402,47 @@ request_t *request_from_reader(int client_fd) {
     return NULL;
   }
 
-  size_t allocated_size = BYTES_READ + 1;
-  char *line = malloc(allocated_size);
+  char *buffer = malloc(BYTES_READ + 1);
+  if (buffer == NULL) {
+    return NULL;
+  }
+  buffer[BYTES_READ] = '\0';
+
+  char *line = malloc(LINE_SIZE * sizeof(char));
+  if (line == NULL) {
+    return NULL;
+  }
   line[0] = '\0';
+
   request->request_line = request_line;
   request->state = INITIALIZED;
+  request->headers = malloc(sizeof(array_t));
+
+  if (request->headers == NULL) {
+    return NULL;
+  }
+
+  request->headers->capacity = 8;
+  request->headers->count = 0;
+  request->headers->elements =
+      malloc(sizeof(header_t *) * request->headers->capacity);
+
+  if (request->headers->elements == NULL) {
+    return NULL;
+  }
+
   size_t read_to_index = 0;
   size_t bytes_read = 0;
   size_t bytes_consumed = 0;
 
   while (request->state != DONE) {
-    if (read_to_index >= allocated_size) {
-      allocated_size += BYTES_READ + 1;
-      char *temp = realloc(line, allocated_size);
-
-      if (temp == NULL) {
-        free(line);
-        return NULL;
-      }
-      line = temp;
-    }
-
-    bytes_read = recv(client_fd, line, BYTES_READ, 0);
-
+    bytes_read = recv(client_fd, buffer, BYTES_READ, 0);
     if (bytes_read == 0) {
       break;
     }
-    read_to_index += bytes_read;
 
+    strncat(line, buffer, strlen(buffer));
+    read_to_index += bytes_read;
     bytes_consumed = parse(line, request);
 
     if (bytes_consumed == 0) {
@@ -173,13 +450,19 @@ request_t *request_from_reader(int client_fd) {
     }
 
     char *start_new_part_ptr = line + bytes_consumed;
-    char *new_line = malloc(read_to_index - bytes_consumed + 1);
+
+    char *new_line = malloc(LINE_SIZE * sizeof(char));
     new_line[0] = '\0';
     strncat(new_line, start_new_part_ptr, read_to_index - bytes_consumed);
+
     free(line);
+    free(buffer);
+
+    buffer = malloc(BYTES_READ + 1);
+    buffer[BYTES_READ] = '\0';
+
     line = new_line;
     read_to_index -= bytes_consumed;
-    allocated_size -= bytes_consumed;
   }
 
   free(line);

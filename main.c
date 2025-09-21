@@ -14,94 +14,63 @@
 #define INITIAL_CAPACITY 8
 #define INITIAL_LINE_SIZE 256
 
-typedef struct ArrayStruct {
-  int count;
-  int capacity;
-  void **elements;
-} array_t;
-
-void arr_destroy(array_t *arr) {
-  if (arr == NULL) {
-    return;
-  }
-
-  for (int i = 0; i < arr->count; i++) {
-    free(arr->elements[i]);
-  }
-
-  free(arr->elements);
-  free(arr);
-}
-
-void add_line_to_arr(array_t *arr, char *line) {
-  if (arr == NULL || line == NULL) {
-    return;
-  }
-
-  if (arr->count > arr->capacity) {
-    arr->capacity = arr->capacity * 2;
-    arr->elements = realloc(arr->elements, sizeof(char *) * arr->capacity);
-  }
-
-  arr->elements[arr->count] = line;
-  arr->count++;
-}
-
-array_t *getLines(int client_fd) {
-  array_t *arr = malloc(sizeof(array_t));
-
-  if (arr == NULL) {
-    return NULL;
-  }
-  arr->count = 0;
-  arr->capacity = INITIAL_CAPACITY;
-  arr->elements = malloc(sizeof(char *) * arr->capacity);
-  if (arr->elements == NULL) {
-    return NULL;
-  }
-
-  char buffer[BUFFER_SIZE];
-  char *line = malloc(sizeof(char) * INITIAL_LINE_SIZE);
-
-  if (line == NULL) {
-    free(arr->elements);
-    free(arr);
-    return NULL;
-  }
-  size_t current_line_size = 0;
-  size_t bytes_size = 0;
-  size_t line_size = INITIAL_LINE_SIZE;
-
-  while ((bytes_size = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
-    if (current_line_size > line_size) {
-      line_size *= 2;
-      line = realloc(line, line_size);
-    }
-
-    for (int i = 0; i < bytes_size; i++) {
-      if (buffer[i] != '\n') {
-        line[current_line_size] = buffer[i];
-        current_line_size++;
-      } else {
-        line[current_line_size] = '\0';
-        add_line_to_arr(arr, line);
-        line = malloc(sizeof(char) * INITIAL_LINE_SIZE);
-        current_line_size = 0;
-      }
-    }
-  }
-
-  // POST request body doesn't have endline
-  if (bytes_size == 0 && current_line_size > 0) {
-    line[current_line_size] = '\0';
-    add_line_to_arr(arr, line);
-    line = NULL;
-  }
-  free(line);
-
-  return arr;
-}
-
+// array_t *getLines(int client_fd) {
+//   array_t *arr = malloc(sizeof(array_t));
+//
+//   if (arr == NULL) {
+//     return NULL;
+//   }
+//   arr->count = 0;
+//   arr->capacity = INITIAL_CAPACITY;
+//   arr->elements = malloc(sizeof(char *) * arr->capacity);
+//   if (arr->elements == NULL) {
+//     return NULL;
+//   }
+//
+//   char buffer[BUFFER_SIZE];
+//   char *line = malloc(sizeof(char) * INITIAL_LINE_SIZE);
+//
+//   if (line == NULL) {
+//     free(arr->elements);
+//     free(arr);
+//     return NULL;
+//   }
+//   size_t current_line_size = 0;
+//   size_t bytes_size = 0;
+//   size_t line_size = INITIAL_LINE_SIZE;
+//
+//   while ((bytes_size = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
+//     if (current_line_size > line_size) {
+//       line_size *= 2;
+//       line = realloc(line, line_size);
+//     }
+//
+//     for (int i = 0; i < bytes_size; i++) {
+//       if (buffer[i] != '\n') {
+//         line[current_line_size] = buffer[i];
+//         current_line_size++;
+//       } else {
+//         line[current_line_size] = '\0';
+//         add_line_to_arr(arr, line);
+//         line = malloc(sizeof(char) * INITIAL_LINE_SIZE);
+//         current_line_size = 0;
+//       }
+//     }
+//   }
+//
+//   // POST request body doesn't have endline
+//   if (bytes_size == 0 && current_line_size > 0) {
+//     line[current_line_size] = '\0';
+//     add_line_to_arr(arr, line);
+//     line = NULL;
+//   }
+//   free(line);
+//
+//   return arr;
+// }
+//
+//
+//
 int main() {
   int sock_fd;
   int opt = 1;
@@ -154,16 +123,21 @@ int main() {
            ntohs(client_addr.sin_port));
     // array_t *arr = getLines(client_sockfd);
     request_t *request = request_from_reader(client_sockfd);
-    printf("%s \n", request->request_line->method);
-    printf("%s \n", request->request_line->request_target);
-    printf("%s \n", request->request_line->http_version);
-    //
-    // for (int i = 0; i < arr->count; i++) {
-    //   printf("%s\n", (char *)arr->elements[i]);
-    fflush(stdout);
-    // }
-    //
-    // arr_destroy(arr);
+	
+		printf("\n\nRequest line: \n");
+
+    printf("- Method: %s \n", request->request_line->method);
+    printf("- Target: %s \n", request->request_line->request_target);
+    printf("- Version: %s \n", request->request_line->http_version);
+    
+	printf("Headers: \n");
+    for (int i = 0; i < request->headers->count; i++) {
+      printf("- %s: %s\n", request->headers->elements[i]->key,
+             request->headers->elements[i]->value);
+      fflush(stdout);
+    }
+    destroy_arr(request->headers);
+    free(request);
     printf("Connection closed\n!");
 
     close(client_sockfd);
