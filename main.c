@@ -123,19 +123,23 @@ int main() {
            ntohs(client_addr.sin_port));
     // array_t *arr = getLines(client_sockfd);
     request_t *request = request_from_reader(client_sockfd);
-	
-		printf("\n\nRequest line: \n");
+
+    printf("\n\nRequest line: \n");
 
     printf("- Method: %s \n", request->request_line->method);
     printf("- Target: %s \n", request->request_line->request_target);
     printf("- Version: %s \n", request->request_line->http_version);
-    
-	printf("Headers: \n");
+
+    printf("Headers: \n");
     for (int i = 0; i < request->headers->count; i++) {
       printf("- %s: %s\n", request->headers->elements[i]->key,
              request->headers->elements[i]->value);
       fflush(stdout);
     }
+
+    printf("Body:\n");
+    printf("%s\n", request->body);
+    printf("\n");
     destroy_arr(request->headers);
     free(request);
     printf("Connection closed\n!");

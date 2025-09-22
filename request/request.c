@@ -177,9 +177,54 @@ void add_value_to_header(header_t *header, array_t *arr) {
   strncat(header_ptr->value, header->value, strlen(header->value));
 }
 
+size_t parse_body(char *body, request_t *request) {
+  int content_length = -1;
+  for (int i = 0; i < request->headers->count; i++) {
+    if (strcmp(request->headers->elements[i]->key, "content-length") == 0) {
+      content_length = atoi(request->headers->elements[i]->value);
+      break;
+    }
+  }
+
+  size_t bytes_consumed = 0;
+  size_t body_length = 0;
+  char *ptr = body;
+  while (*ptr == '\r' || *ptr == '\n') {
+    ptr++;
+  }
+
+  char *body_start_ptr = ptr;
+
+  while (*ptr) {
+    ptr++;
+    body_length++;
+  }
+
+  if (body_length == 0 && content_length == -1) {
+    printf("Empty body, no reported content length \n");
+    return bytes_consumed;
+  }
+
+  if (body_length < content_length) {
+    return 0;
+  }
+
+  if (body_length > content_length) {
+    fprintf(stderr,
+            "Body larger than reported content length | "
+            "body_length: %zu - content_length %d \n",
+            body_length, content_length);
+    exit(EXIT_FAILURE);
+  }
+
+  strcat(request->body, body_start_ptr);
+  request->state = DONE;
+
+  return bytes_consumed + body_length;
+}
+
 size_t parse_header(char *headers, request_t *request) {
 
-  char *crlf = "\r\n";
   size_t bytes_consumed = 0;
   char *ptr = headers;
 
@@ -189,7 +234,7 @@ size_t parse_header(char *headers, request_t *request) {
   }
 
   if (*ptr == '\r' && *(ptr + 1) == '\n') {
-    request->state = DONE;
+    request->state = PARSING_BODY;
     return bytes_consumed;
   }
 
@@ -235,6 +280,7 @@ size_t parse_header(char *headers, request_t *request) {
     exit(EXIT_FAILURE);
   }
   char *trimmed_key = trim(key);
+  char *lower_case_key = to_lower_case(trimmed_key);
   header_t *new_header = malloc(sizeof(header_t));
 
   if (new_header == NULL) {
@@ -247,7 +293,7 @@ size_t parse_header(char *headers, request_t *request) {
 
   char *trimmed_value = trim(line);
 
-  strncat(new_header->key, trimmed_key, strlen(trimmed_key));
+  strncat(new_header->key, lower_case_key, strlen(lower_case_key));
   strncat(new_header->value, trimmed_value, strlen(trimmed_value));
 
   // array->elements[array->count] = new_header;
@@ -255,6 +301,7 @@ size_t parse_header(char *headers, request_t *request) {
   free(old_ptr);
   free(trimmed_key);
   free(trimmed_value);
+  free(lower_case_key);
 
   add_value_to_header(new_header, request->headers);
 
@@ -316,6 +363,15 @@ size_t parse(char *line, request_t *request) {
   }
   case PARSING_HEADERS: {
     size_t bytes_consumed = parse_header(line, request);
+
+    if (bytes_consumed == 0) {
+      return 0;
+    }
+
+    return bytes_consumed;
+  }
+  case PARSING_BODY: {
+    size_t bytes_consumed = parse_body(line, request);
 
     if (bytes_consumed == 0) {
       return 0;
@@ -421,7 +477,7 @@ request_t *request_from_reader(int client_fd) {
   if (request->headers == NULL) {
     return NULL;
   }
-
+  request->body[0] = '\0';
   request->headers->capacity = 8;
   request->headers->count = 0;
   request->headers->elements =
@@ -430,7 +486,6 @@ request_t *request_from_reader(int client_fd) {
   if (request->headers->elements == NULL) {
     return NULL;
   }
-
   size_t read_to_index = 0;
   size_t bytes_read = 0;
   size_t bytes_consumed = 0;

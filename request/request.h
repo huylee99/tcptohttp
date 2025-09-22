@@ -19,7 +19,8 @@ typedef struct Array {
 typedef enum State {
 	INITIALIZED = 0,
 	PARSING_HEADERS = 1,
-	DONE = 2
+	PARSING_BODY = 2,
+	DONE = 3
 } state_t;
 
 typedef struct RequestLine {
